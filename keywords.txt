@@ -1,0 +1,30 @@
+#######################################
+# Syntax Coloring Train For NeuButton
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+NeuButton	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+onPressed	KEYWORD2
+onRelease	KEYWORD2
+onLatch	KEYWORD2
+addCombine	KEYWORD2
+addRepeat	KEYWORD2
+addLongPress	KEYWORD2
+isPressed	KEYWORD2
+isLatched	KEYWORD2
+getRawState	KEYWORD2
+setInverse	KEYWORD2
+refresh	KEYWORD2
+loop	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
