@@ -135,9 +135,8 @@ To use `addCombine()`, you need to provide a `mask`. This is a sum of the bitwis
 - **Button 0 + 1 + 2**: `1 + 2 + 4` = **Mask 7**
 
 > [!TIP]
-> 
-> **Tip:** You can use binary literals in Arduino IDE for better readability:  
-> `btn.addCombine(myCallback, 0b101, true); // Buttons 0 and 2`
+> **Better Readability:** You can use binary literals directly in the Arduino IDE to visualize which buttons are active in a combination:
+> `btn.addCombine(myCallback, 0b101, true); // Buttons 0 and 2 (Bit 0 and Bit 2 are HIGH)`
 
 ---
 
