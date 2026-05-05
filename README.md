@@ -2,13 +2,13 @@
 
 A lightweight, high-performance Arduino library for managing multiple buttons using **Bitmasking**. NeuButton is designed to handle up to 32 buttons with minimal RAM consumption, making it ideal for memory-constrained projects like Gamepads, Macro Pads, and complex Control Panels.
 
-[![License: MIT](https://shields.io)](https://opensource.org)
-[![Platform: Arduino](https://shields.io)](https://arduino.cc)
-[![Platform: ESP32](https://shields.io)](https://espressif.com)
-[![Platform: ESP8266](https://shields.io)](https://espressif.com)
-[![Language: C++11](https://shields.io)](https://isocpp.org)
-[![Architecture: 32-bit](https://shields.io)]()
-[![Max Buttons: 32](https://shields.io)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform: Arduino](https://img.shields.io/badge/Platform-Arduino-00878F?logo=arduino&logoColor=white)](https://arduino.cc)
+[![Platform: ESP32](https://img.shields.io/badge/Platform-ESP32-blue?logo=espressif&logoColor=white)](https://espressif.com)
+[![Platform: ESP8266](https://img.shields.io/badge/Platform-ESP8266-lightgrey?logo=espressif&logoColor=white)](https://espressif.com)
+[![Architecture: 32-bit](https://img.shields.io/badge/Architecture-32--bit-orange.svg)]()
+[![Max Buttons: 32](https://img.shields.io/badge/Max%20Buttons-32-informational.svg)]()
+[![Design: Deterministic](https://img.shields.io/badge/Design-Deterministic-critical.svg)]()
 
 ---
 
