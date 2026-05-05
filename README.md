@@ -41,7 +41,7 @@ lib_deps = ulywae/NeuButton
 
 ### Manual Installation
 
-1. Download the [NeuButton repository](https://github.com) as a `.zip` file.
+1. Download the [NeuButton repository](https://github.com/ulywae/NeuButton) as a `.zip` file.
 2. In the Arduino IDE, go to **Sketch > Include Library > Add .ZIP Library**.
 3. Select the downloaded file.
 
@@ -113,6 +113,29 @@ btn.addCombine([](uint32_t mask) {
     Serial.println("Shortcut Triggered!");
 }, 5, true);
 ```
+
+---
+
+### Bitmask Cheat Sheet
+To use `addCombine()`, you need to provide a `mask`. This is a sum of the bitwise values of the buttons you want to group.
+
+
+| Button Index | Bitwise Formula | Mask Value (Dec) | Binary |
+| :--- | :--- | :--- | :--- |
+| Button 0 | `1 << 0` | **1** | `00001` |
+| Button 1 | `1 << 1` | **2** | `00010` |
+| Button 2 | `1 << 2` | **4** | `00100` |
+| Button 3 | `1 << 3` | **8** | `01000` |
+| Button 4 | `1 << 4` | **16** | `10000` |
+
+#### Common Combinations:
+- **Button 0 + 1**: `1 + 2` = **Mask 3**
+- **Button 0 + 2**: `1 + 4` = **Mask 5**
+- **Button 1 + 2**: `2 + 4` = **Mask 6**
+- **Button 0 + 1 + 2**: `1 + 2 + 4` = **Mask 7**
+
+> **Tip:** You can use binary literals in Arduino IDE for better readability:  
+> `btn.addCombine(myCallback, 0b101, true); // Buttons 0 and 2`
 
 ---
 
