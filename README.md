@@ -1,6 +1,15 @@
 # NeuButton
 
-A lightweight, high-performance Arduino library for managing multiple buttons using **Bitmasking**. NeuButton is designed to handle up to 32 buttons with minimal RAM consumption, making it ideal for memory-constrained projects like Gamepads, Macro Pads, and complex Control Panels.
+A lightweight, deterministic, and high-performance Arduino library for managing multiple buttons using **bitmasking**.
+
+NeuButton can handle up to **32 buttons in a single instance** with minimal RAM usage, making it ideal for memory-constrained and real-time applications such as:
+
+- Gamepads  
+- Macro Pads  
+- Control Panels  
+- Embedded UI Systems  
+
+Unlike traditional button libraries, NeuButton is designed as a **deterministic input engine**, not just a collection of button objects.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Arduino](https://img.shields.io/badge/Platform-Arduino-00878F?logo=arduino&logoColor=white)](https://arduino.cc)
@@ -14,12 +23,29 @@ A lightweight, high-performance Arduino library for managing multiple buttons us
 
 ## Key Features
 
-- **Bitmask Engine**: Manages up to 32 buttons using a single `uint32_t` variable.
-- **Automatic Latching**: Built-in toggle logic. Turn any momentary button into a virtual switch without extra code.
-- **Powerful Combinations**: Detect multi-button shortcuts (e.g., Btn A + Btn B) with an optional exclusive mode.
-- **Independent Callbacks**: Separate events for Pressed, Released, Latching, Long Press, and Repeat.
-- **Hardware Debouncing**: Non-blocking software debouncing for stable signals.
-- **Universal Compatibility**: Works on all Arduino-compatible boards (AVR, ESP8266, ESP32, STM32, etc.).
+- **Bitmask Engine**  
+  Process up to 32 buttons using a single `uint32_t` state. Fast and memory-efficient.
+
+- **Deterministic Design**  
+  Fully predictable behavior with no hidden delays or runtime surprises.
+
+- **Automatic Latching**  
+  Built-in toggle logic. Turn momentary buttons into virtual switches instantly.
+
+- **Exclusive Selector Mode**  
+  Optional radio-style behavior (only one button active at a time).
+
+- **Edge-Triggered Combinations**  
+  Detect multi-button shortcuts without repeated triggering (anti-spam).
+
+- **Independent Callbacks**  
+  Separate handlers for Press, Release, Latch, Long Press, and Repeat.
+
+- **Non-Blocking Debounce**  
+  Stable input handling without blocking delays.
+
+- **Cross-Platform**  
+  Works on AVR, ESP8266, ESP32, STM32, and other Arduino-compatible boards.
 
 ---
 
@@ -28,33 +54,32 @@ A lightweight, high-performance Arduino library for managing multiple buttons us
 ### Arduino Library Manager (Recommended)
 
 1. In the Arduino IDE, go to **Sketch > Include Library > Manage Libraries...**
-2. Search for **NeuButton** in the search bar.
-3. Click **Install** on the latest version.
+2. Search for **NeuButton**
+3. Click **Install**
 
 ### PlatformIO
 
-Add the following to your `platformio.ini`:
-
 ```ini
 lib_deps = ulywae/NeuButton
-```
+````
 
 ### Manual Installation
 
-1. Download the [NeuButton repository](https://github.com/ulywae/NeuButton) as a `.zip` file.
-2. In the Arduino IDE, go to **Sketch > Include Library > Add .ZIP Library**.
-3. Select the downloaded file.
+1. Download the repository as `.zip`
+2. Open Arduino IDE
+3. Go to **Sketch > Include Library > Add .ZIP Library**
+4. Select the downloaded file
 
 ---
 
 ## Usage
 
-### Basic Setup
+### Basic Example
 
 ```cpp
 #include <NeuButton.h>
 
-const uint8_t pins[] = {2, 3, 4}; // Defined button pins
+const uint8_t pins[] = {2, 3, 4};
 const uint8_t numPins = sizeof(pins) / sizeof(pins[0]);
 
 NeuButton btn(pins, numPins);
@@ -62,20 +87,18 @@ NeuButton btn(pins, numPins);
 void setup() {
     Serial.begin(115200);
 
-    // Register simple press event
     btn.onPressed([](uint8_t index) {
-        Serial.print("Button Pressed: ");
+        Serial.print("Pressed: ");
         Serial.println(index);
     });
 
-    // Register latching event (Toggle)
     btn.onLatch([](uint8_t index, bool state) {
-        Serial.print("Button ");
+        Serial.print("Latch ");
         Serial.print(index);
         Serial.println(state ? " ON" : " OFF");
     });
 
-    // Sync initial state (Crucial for physical toggle switches)
+    // Important: sync initial hardware state
     btn.refresh();
 }
 
@@ -84,94 +107,139 @@ void loop() {
 }
 ```
 
-### Advanced Features
+> [!IMPORTANT]
+> 
+> `btn.loop()` must be called continuously.
+> NeuButton relies on a deterministic update cycle for accurate timing and event detection.
 
-#### Long Press & Auto-Repeat
+---
 
-Every button can have its own timing for specific actions.
+## Advanced Features
+
+### Long Press & Repeat
 
 ```cpp
 // Trigger after holding button 0 for 2 seconds
-btn.addLongPress(0, 2000, [](uint8_t index) {
-    Serial.println("Long Press Detected!");
+btn.addLongPress(0, 2000, [](uint8_t i) {
+    Serial.println("Long press!");
 });
 
-// Repeat every 100ms while holding button 1
-btn.addRepeat(1, 100, [](uint8_t index) {
+// Repeat every 100 ms while holding button 1
+btn.addRepeat(1, 100, [](uint8_t i) {
     Serial.println("Repeating...");
 });
 ```
 
-#### Button Combinations (Shortcuts)
+---
 
-Detect when multiple buttons are pressed together.
+### Button Combinations (Shortcuts)
 
 ```cpp
-// Trigger when Button 0 and Button 2 are pressed simultaneously
-// Mask (1 << 0) | (1 << 2) = 5
+// Button 0 + Button 2
 btn.addCombine([](uint32_t mask) {
-    Serial.println("Shortcut Triggered!");
-}, 5, true);
+    Serial.println("Shortcut!");
+}, (1 << 0) | (1 << 2), true);
 ```
+
+Combinations are **edge-triggered**, meaning they fire only once when the condition becomes active.
 
 ---
 
-### Bitmask Cheat Sheet
-To use `addCombine()`, you need to provide a `mask`. This is a sum of the bitwise values of the buttons you want to group.
+## Startup Behavior (Boot-Time Sync)
 
+NeuButton provides `refresh()` to synchronize software state with physical input at startup.
 
-| Button Index | Bitwise Formula | Mask Value (Dec) | Binary |
-| :--- | :--- | :--- | :--- |
-| Button 0 | `1 << 0` | **1** | `00001` |
-| Button 1 | `1 << 1` | **2** | `00010` |
-| Button 2 | `1 << 2` | **4** | `00100` |
-| Button 3 | `1 << 3` | **8** | `01000` |
-| Button 4 | `1 << 4` | **16** | `10000` |
+Useful for:
 
-#### Common Combinations:
-- **Button 0 + 1**: `1 + 2` = **Mask 3**
-- **Button 0 + 2**: `1 + 4` = **Mask 5**
-- **Button 1 + 2**: `2 + 4` = **Mask 6**
-- **Button 0 + 1 + 2**: `1 + 2 + 4` = **Mask 7**
+* Toggle switches
+* DIP switches
+* Hardware selectors
+
+```cpp
+btn.refresh();
+```
+
+Without calling `refresh()`, all buttons start in a neutral state until interaction occurs.
+
+---
+
+## Bitmask Cheat Sheet
+
+| Button Index | Formula  | Value | Binary  |
+| ------------ | -------- | ----- | ------- |
+| 0            | `1 << 0` | 1     | `00001` |
+| 1            | `1 << 1` | 2     | `00010` |
+| 2            | `1 << 2` | 4     | `00100` |
+| 3            | `1 << 3` | 8     | `01000` |
+| 4            | `1 << 4` | 16    | `10000` |
+
+### Examples
+
+* Button 0 + 1 → `1 + 2 = 3`
+* Button 0 + 2 → `1 + 4 = 5`
+* Button 1 + 2 → `2 + 4 = 6`
 
 > [!TIP]
-> **Better Readability:** You can use binary literals directly in the Arduino IDE to visualize which buttons are active in a combination:
-> `btn.addCombine(myCallback, 0b101, true); // Buttons 0 and 2 (Bit 0 and Bit 2 are HIGH)`
+>
+> Use binary literals for readability
+> `0b101` → Button 0 + Button 2
 
 ---
 
 ## API Reference
 
-| Function                          | Description                                           |
-| :-------------------------------- | :---------------------------------------------------- |
-| `onPressed(cb)`                   | Called immediately when a button is pressed.          |
-| `onRelease(cb)`                   | Called when a button is released.                     |
-| `onLatch(cb)`                     | Called when a button's toggle state changes.          |
-| `addLongPress(idx, ms, cb)`       | Single trigger after `ms` duration.                   |
-| `addRepeat(idx, ms, cb)`          | Repeated trigger every `ms` while held.               |
-| `addCombine(cb, mask, exclusive)` | Triggered on specific button combinations.            |
-| `isPressed(idx)`                  | Returns `true` if the button is physically held.      |
-| `isLatched(idx)`                  | Returns `true` if the button's toggle state is ON.    |
-| `refresh()`                       | Synchronizes software state with physical pin states. |
+| Function                          | Description                      |
+| --------------------------------- | -------------------------------- |
+| `onPressed(cb)`                   | Called when a button is pressed  |
+| `onRelease(cb)`                   | Called when a button is released |
+| `onLatch(cb)`                     | Called when latch state changes  |
+| `addLongPress(idx, ms, cb)`       | Trigger once after hold          |
+| `addRepeat(idx, ms, cb)`          | Trigger repeatedly while held    |
+| `addCombine(cb, mask, exclusive)` | Detect button combinations       |
+| `setExclusiveLatch(bool)`         | Enable radio-style latch         |
+| `isPressed(idx)`                  | Returns physical state           |
+| `isLatched(idx)`                  | Returns latch state              |
+| `refresh()`                       | Sync hardware state              |
 
 ---
 
 ## Why NeuButton?
 
-Most button libraries create an object for every single button, which consumes significant RAM. **NeuButton** uses **Bitwise Logic** to process all buttons at once. It’s faster, smaller, and provides advanced logic (Latch/Combine) out of the box that usually requires manual coding.
+Most button libraries create **one object per button**, increasing RAM usage and complexity.
+
+NeuButton uses a different approach:
+
+* Single engine
+* Bitmask processing
+* Deterministic execution
+
+Result:
+
+* Lower memory usage
+* Faster execution
+* Built-in advanced logic (Latch, Combine, Selector)
+
+It scales cleanly as your project grows.
 
 ---
 
 ## Notes
 
-This is primarily a personal toolkit. If it helps your project — great. If not — that’s fine too. It does exactly what it was built to do.
+This is primarily a personal toolkit built for real-world embedded systems.
+
+If it fits your use case — great.
+If not — that’s fine too.
+
+It does exactly what it was designed to do.
+
+---
 
 ## Author
 
-**Ulywae** (@neufa)  
+**Ulywae (@neufa)**
 Part of the **NEU Ecosystem**
 
-> _Handcrafted with pure logic._
+> *Handcrafted with pure logic.*
 
 ---
 
