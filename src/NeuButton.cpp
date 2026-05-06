@@ -1,29 +1,32 @@
+/**
+ * @file NeuButton.cpp
+ * @brief Implementation of NeuButton multi‑button input engine.
+ */
+
 #include "NeuButton.h"
 
-/**
- * @brief Constructor
- */
-NeuButton::NeuButton(const uint8_t *pins, uint8_t count)
-{
-    _pins = pins;
-    _count = (count > 32) ? 32 : count;
+// =====================================================
+// Construction / Destruction
+// =====================================================
 
-    _inverse = new bool[_count]();
+NeuButton::NeuButton(const uint8_t *pins, uint8_t count, unsigned long debounceDelay)
+    : _pins(pins),
+      _count((count > 32) ? 32 : count),
+      _debounceDelay(debounceDelay)
+{
+    // Allocate per‑button arrays
+    _inverse = new bool[_count](); // zero‑initialised
     _pressTime = new unsigned long[_count]();
     _lastRepeatTime = new unsigned long[_count]();
     _repeats = new SpecialEntry[_count]();
     _longPresses = new SpecialEntry[_count]();
-    _combines = new CombineEntry[10](); // max 10 combinations
+    _combines = new CombineEntry[MAX_COMBINES]();
 
+    // Initialise all pins with internal pull‑up
     for (uint8_t i = 0; i < _count; i++)
-    {
         pinMode(_pins[i], INPUT_PULLUP);
-    }
 }
 
-/**
- * @brief Destructor
- */
 NeuButton::~NeuButton()
 {
     delete[] _inverse;
@@ -35,7 +38,7 @@ NeuButton::~NeuButton()
 }
 
 // =====================================================
-// PUBLIC API
+// Public API
 // =====================================================
 
 bool NeuButton::isPressed(uint8_t index)
@@ -82,46 +85,41 @@ void NeuButton::addLongPress(uint8_t index, uint32_t duration, ButtonCallback cb
 
 void NeuButton::addCombine(CombineCallback cb, uint32_t mask, bool exclusive)
 {
-    if (_combineCount < 10)
+    if (_combineCount < MAX_COMBINES)
         _combines[_combineCount++] = {cb, mask, exclusive, false};
 }
 
-/**
- * @brief Initial state sync (no callbacks)
- */
 void NeuButton::refresh()
 {
     _state = 0;
 
     for (uint8_t i = 0; i < _count; i++)
     {
-        if ((digitalRead(_pins[i]) == LOW) ^ _inverse[i])
+        bool active = (digitalRead(_pins[i]) == LOW) ^ _inverse[i];
+        if (active)
             _state |= (1UL << i);
     }
 
     _lastState = _state;
     _lastReading = _state;
-
-    // Sync latch with physical state
-    _latchState = _state;
+    _latchState = _state; // synchronise latch with physical state
 }
 
-/**
- * @brief Main processing loop
- */
+// =====================================================
 void NeuButton::loop()
 {
     unsigned long now = millis();
-    uint32_t reading = 0;
 
-    // --- Scan ---
+    // ---- 1. Scan all pins ----
+    uint32_t reading = 0;
     for (uint8_t i = 0; i < _count; i++)
     {
-        if ((digitalRead(_pins[i]) == LOW) ^ _inverse[i])
+        bool active = (digitalRead(_pins[i]) == LOW) ^ _inverse[i];
+        if (active)
             reading |= (1UL << i);
     }
 
-    // --- Debounce ---
+    // ---- 2. Debounce ----
     if (reading != _lastReading)
     {
         _lastReading = reading;
@@ -129,67 +127,60 @@ void NeuButton::loop()
     }
 
     if ((now - _lastDebounceTime) < _debounceDelay)
-        return;
+        return; // still bouncing, do nothing
 
-    // --- Stable state update ---
+    // ---- 3. Stable state reached ----
     if (_state != _lastReading)
-    {
         _state = _lastReading;
-    }
     else
-    {
-        goto HOLD_PROCESS;
-    }
+        // No change in press state → only handle repeat/long‑press on held buttons
+        goto handle_holds;
 
-    uint32_t changed = _state ^ _lastState;
-
-    // =====================================================
-    // TRANSITIONS (PRESS / RELEASE / LATCH)
-    // =====================================================
-    if (changed)
+    // ---- 4. State changed: process press / release transitions ----
     {
-        for (uint8_t i = 0; i < _count; i++)
+        uint32_t changed = _state ^ _lastState;
+
+        if (changed)
         {
-            uint32_t mask = (1UL << i);
-
-            if (changed & mask)
+            for (uint8_t i = 0; i < _count; i++)
             {
-                if (_state & mask)
+                uint32_t mask = (1UL << i);
+                if (changed & mask)
                 {
-                    // PRESS
-                    _pressTime[i] = now;
-                    _lastRepeatTime[i] = now;
-                    _longPresses[i].triggered = false;
+                    if (_state & mask)
+                    {
+                        // --- Press event ---
+                        _pressTime[i] = now;
+                        _lastRepeatTime[i] = now;
+                        _longPresses[i].triggered = false;
 
-                    if (_pressedCb)
-                        _pressedCb(i);
+                        if (_pressedCb)
+                            _pressedCb(i);
 
-                    // LATCH
-                    if (_exclusiveLatch)
-                        _latchState = mask;
+                        // --- Latch handling ---
+                        if (_exclusiveLatch)
+                            _latchState = mask; // only this button latched
+                        else
+                            _latchState ^= mask; // toggle
+
+                        if (_latchCb)
+                            _latchCb(i, (_latchState & mask) != 0);
+                    }
                     else
-                        _latchState ^= mask;
-
-                    if (_latchCb)
-                        _latchCb(i, (_latchState & mask) != 0);
-                }
-                else
-                {
-                    // RELEASE
-                    if (_releaseCb)
-                        _releaseCb(i);
+                    {
+                        // --- Release event ---
+                        if (_releaseCb)
+                            _releaseCb(i);
+                    }
                 }
             }
         }
 
-        // =====================================================
-        // COMBINE (EDGE TRIGGERED)
-        // =====================================================
+        // ---- 5. Combination detection (edge‑triggered) ----
         for (uint8_t j = 0; j < _combineCount; j++)
         {
             bool match = (_state & _combines[j].mask) == _combines[j].mask;
-
-            if (_combines[j].exclusive && _state != _combines[j].mask)
+            if (_combines[j].exclusive && (_state != _combines[j].mask))
                 match = false;
 
             if (match)
@@ -198,27 +189,21 @@ void NeuButton::loop()
                 {
                     if (_combines[j].cb)
                         _combines[j].cb(_state);
-
                     _combines[j].active = true;
                 }
             }
             else
-            {
                 _combines[j].active = false;
-            }
         }
     }
 
-HOLD_PROCESS:
-
-    // =====================================================
-    // HOLD (LONG PRESS + REPEAT)
-    // =====================================================
+handle_holds:
+    // ---- 6. Handle long press and repeat for held buttons ----
     for (uint8_t i = 0; i < _count; i++)
     {
         if (_state & (1UL << i))
         {
-            // LONG PRESS
+            // Long press
             if (_longPresses[i].cb && !_longPresses[i].triggered)
             {
                 if (now - _pressTime[i] >= _longPresses[i].time)
@@ -228,7 +213,7 @@ HOLD_PROCESS:
                 }
             }
 
-            // REPEAT
+            // Repeat
             if (_repeats[i].cb)
             {
                 if (now - _lastRepeatTime[i] >= _repeats[i].time)
