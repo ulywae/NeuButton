@@ -1,5 +1,8 @@
 #include "NeuButton.h"
 
+/**
+ * @brief Constructor
+ */
 NeuButton::NeuButton(const uint8_t *pins, uint8_t count)
 {
     _pins = pins;
@@ -10,7 +13,7 @@ NeuButton::NeuButton(const uint8_t *pins, uint8_t count)
     _lastRepeatTime = new unsigned long[_count]();
     _repeats = new SpecialEntry[_count]();
     _longPresses = new SpecialEntry[_count]();
-    _combines = new CombineEntry[10]; // Limit 10 kombinasi
+    _combines = new CombineEntry[10](); // max 10 combinations
 
     for (uint8_t i = 0; i < _count; i++)
     {
@@ -18,6 +21,9 @@ NeuButton::NeuButton(const uint8_t *pins, uint8_t count)
     }
 }
 
+/**
+ * @brief Destructor
+ */
 NeuButton::~NeuButton()
 {
     delete[] _inverse;
@@ -28,19 +34,38 @@ NeuButton::~NeuButton()
     delete[] _combines;
 }
 
-// Getters
-bool NeuButton::isPressed(uint8_t index) { return (index < _count) && (_state & (1UL << index)); }
-bool NeuButton::isLatched(uint8_t index) { return (index < _count) && (_latchState & (1UL << index)); }
-uint32_t NeuButton::getRawState() { return _state; }
+// =====================================================
+// PUBLIC API
+// =====================================================
 
-// Config & Callbacks
+bool NeuButton::isPressed(uint8_t index)
+{
+    return (index < _count) && (_state & (1UL << index));
+}
+
+bool NeuButton::isLatched(uint8_t index)
+{
+    return (index < _count) && (_latchState & (1UL << index));
+}
+
+uint32_t NeuButton::getRawState()
+{
+    return _state;
+}
+
 void NeuButton::onPressed(ButtonCallback cb) { _pressedCb = cb; }
 void NeuButton::onRelease(ButtonCallback cb) { _releaseCb = cb; }
 void NeuButton::onLatch(LatchCallback cb) { _latchCb = cb; }
+
 void NeuButton::setInverse(uint8_t index)
 {
     if (index < _count)
         _inverse[index] = true;
+}
+
+void NeuButton::setExclusiveLatch(bool enable)
+{
+    _exclusiveLatch = enable;
 }
 
 void NeuButton::addRepeat(uint8_t index, uint32_t interval, ButtonCallback cb)
@@ -58,90 +83,142 @@ void NeuButton::addLongPress(uint8_t index, uint32_t duration, ButtonCallback cb
 void NeuButton::addCombine(CombineCallback cb, uint32_t mask, bool exclusive)
 {
     if (_combineCount < 10)
-        _combines[_combineCount++] = {cb, mask, exclusive};
+        _combines[_combineCount++] = {cb, mask, exclusive, false};
 }
 
+/**
+ * @brief Initial state sync (no callbacks)
+ */
 void NeuButton::refresh()
 {
     _state = 0;
+
     for (uint8_t i = 0; i < _count; i++)
     {
         if ((digitalRead(_pins[i]) == LOW) ^ _inverse[i])
-        {
             _state |= (1UL << i);
-            _latchState |= (1UL << i);
-        }
     }
+
     _lastState = _state;
+    _lastReading = _state;
+
+    // Sync latch with physical state
+    _latchState = _state;
 }
 
+/**
+ * @brief Main processing loop
+ */
 void NeuButton::loop()
 {
-    uint32_t reading = 0;
     unsigned long now = millis();
+    uint32_t reading = 0;
 
+    // --- Scan ---
     for (uint8_t i = 0; i < _count; i++)
     {
         if ((digitalRead(_pins[i]) == LOW) ^ _inverse[i])
             reading |= (1UL << i);
     }
 
-    if (reading != _state)
+    // --- Debounce ---
+    if (reading != _lastReading)
     {
+        _lastReading = reading;
         _lastDebounceTime = now;
-        _state = reading;
-        return;
     }
+
     if ((now - _lastDebounceTime) < _debounceDelay)
         return;
 
+    // --- Stable state update ---
+    if (_state != _lastReading)
+    {
+        _state = _lastReading;
+    }
+    else
+    {
+        goto HOLD_PROCESS;
+    }
+
     uint32_t changed = _state ^ _lastState;
 
-    // 1. Transisi (Pressed / Released / Latch)
+    // =====================================================
+    // TRANSITIONS (PRESS / RELEASE / LATCH)
+    // =====================================================
     if (changed)
     {
         for (uint8_t i = 0; i < _count; i++)
         {
             uint32_t mask = (1UL << i);
+
             if (changed & mask)
             {
                 if (_state & mask)
                 {
+                    // PRESS
                     _pressTime[i] = now;
                     _lastRepeatTime[i] = now;
                     _longPresses[i].triggered = false;
+
                     if (_pressedCb)
                         _pressedCb(i);
-                    _latchState ^= mask;
+
+                    // LATCH
+                    if (_exclusiveLatch)
+                        _latchState = mask;
+                    else
+                        _latchState ^= mask;
+
                     if (_latchCb)
                         _latchCb(i, (_latchState & mask) != 0);
                 }
                 else
                 {
+                    // RELEASE
                     if (_releaseCb)
                         _releaseCb(i);
                 }
             }
         }
-        // 2. Kombinasi
-        if (_state != 0)
+
+        // =====================================================
+        // COMBINE (EDGE TRIGGERED)
+        // =====================================================
+        for (uint8_t j = 0; j < _combineCount; j++)
         {
-            for (uint8_t j = 0; j < _combineCount; j++)
+            bool match = (_state & _combines[j].mask) == _combines[j].mask;
+
+            if (_combines[j].exclusive && _state != _combines[j].mask)
+                match = false;
+
+            if (match)
             {
-                bool match = (_state & _combines[j].mask) == _combines[j].mask;
-                if (_combines[j].exclusive && _state != _combines[j].mask)
-                    match = false;
-                if (match && _combines[j].cb)
-                    _combines[j].cb(_state);
+                if (!_combines[j].active)
+                {
+                    if (_combines[j].cb)
+                        _combines[j].cb(_state);
+
+                    _combines[j].active = true;
+                }
+            }
+            else
+            {
+                _combines[j].active = false;
             }
         }
     }
 
-    // 3. Kondisi Ditahan (Long Press & Repeat)
+HOLD_PROCESS:
+
+    // =====================================================
+    // HOLD (LONG PRESS + REPEAT)
+    // =====================================================
     for (uint8_t i = 0; i < _count; i++)
     {
         if (_state & (1UL << i))
         {
+            // LONG PRESS
             if (_longPresses[i].cb && !_longPresses[i].triggered)
             {
                 if (now - _pressTime[i] >= _longPresses[i].time)
@@ -150,12 +227,18 @@ void NeuButton::loop()
                     _longPresses[i].triggered = true;
                 }
             }
-            if (_repeats[i].cb && (now - _lastRepeatTime[i] >= _repeats[i].time))
+
+            // REPEAT
+            if (_repeats[i].cb)
             {
-                _repeats[i].cb(i);
-                _lastRepeatTime[i] = now;
+                if (now - _lastRepeatTime[i] >= _repeats[i].time)
+                {
+                    _repeats[i].cb(i);
+                    _lastRepeatTime[i] = now;
+                }
             }
         }
     }
+
     _lastState = _state;
 }
