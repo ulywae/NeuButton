@@ -155,10 +155,18 @@ public:
     void setExclusiveLatch(bool enable);
 
     /**
-     * @brief Synchronize initial hardware state (boot‑time).
-     *
-     * Reads all pins and initialises internal state and latch state
-     * without triggering any callbacks. Call this once in setup().
+     * @brief Re-synchronize internal state with physical button levels.
+     * 
+     * This function reads all pins and updates _state, _lastState, _lastReading,
+     * and _latchState to match the current physical conditions.
+     * 
+     * Use cases:
+     * - Called once in setup() to initialize.
+     * - Called after waking from sleep or resuming from an inactive mode
+     *   where button states might have changed while the system was ignoring them.
+     * 
+     * @warning This will clear any latched states that were set programmatically.
+     *          Only call when you intend to discard previous latch information.
      */
     void refresh();
 
