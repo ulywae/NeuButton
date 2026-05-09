@@ -113,7 +113,7 @@ private:
     uint8_t _combineCount = 0;           ///< Current number of registered combinations
     unsigned long _lastDebounceTime = 0; ///< Global timestamp for the debounce timer
     uint8_t _debounceDelay;              ///< Configurable debounce interval (ms)
-    uint8_t _exclusiveLatch : 1;         ///< 1-bit flag: Enable/disable radio-style latch mode
+    uint8_t _exclusiveLatch : 1 = 0;     ///< 1-bit flag: Enable/disable radio-style latch mode
 
     ButtonCallback _pressedCb = nullptr; ///< Global callback for any button press
     ButtonCallback _releaseCb = nullptr; ///< Global callback for any button release
@@ -134,7 +134,7 @@ public:
      * @note Memory is statically allocated based on the <COUNT> template parameter.
      */
     NeuButton(const uint8_t pins[COUNT], uint8_t debounceDelay = 50)
-        : _debounceDelay(debounceDelay), _exclusiveLatch(0)
+        : _debounceDelay(debounceDelay)
     {
         for (uint8_t i = 0; i < COUNT; i++)
         {
