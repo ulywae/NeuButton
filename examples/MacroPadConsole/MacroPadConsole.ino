@@ -2,7 +2,7 @@
 
 // Scenario: A 3-button controller (Pins 2, 3, 4)
 const uint8_t pins[] = {2, 3, 4};
-NeuButton btn(pins, 3);
+NeuButton<3> btn(pins);
 
 void setup()
 {
