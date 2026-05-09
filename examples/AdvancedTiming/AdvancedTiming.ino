@@ -1,7 +1,7 @@
 #include <NeuButton.h>
 
 const uint8_t pins[] = {2, 3};
-NeuButton btn(pins, 2);
+NeuButton<2> btn(pins);
 
 void setup()
 {
